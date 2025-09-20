@@ -34,7 +34,20 @@ export default defineConfig({
       fileName: (format, entryName) => `${entryName}/index.js`
     },
     rollupOptions: {
-      external: ['aws-lambda'],
+      external: [
+        'aws-lambda',
+        /^node:/,
+        'crypto',
+        'fs',
+        'http',
+        'https',
+        'os',
+        'path',
+        'url',
+        'util',
+        'events',
+        'stream'
+      ],
       output: {
         preserveModules: false,
         entryFileNames: '[name]/index.js'
@@ -42,7 +55,8 @@ export default defineConfig({
     },
     target: 'node18',
     minify: false,
-    sourcemap: false
+    sourcemap: false,
+    ssr: true
   },
   resolve: {
     alias: {
