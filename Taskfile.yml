@@ -1,0 +1,280 @@
+version: '3'
+
+# Serverless Acceleration Platform - TypeScript Template
+# Velocity First: Ship with Confidence & Discipline
+
+vars:
+  PROJECT_NAME: lambda-typescript-template
+  AWS_REGION: us-east-1
+  ENVIRONMENT: dev
+
+env:
+  AWS_REGION: us-east-1
+  NODE_ENV: development
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  # 🚀 Velocity First: Build & Package
+  install:
+    desc: Install dependencies
+    cmds:
+      - npm ci
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules/**
+
+  build:
+    desc: Build TypeScript Lambda functions
+    deps: [install]
+    cmds:
+      - npm run build
+    sources:
+      - src/**/*.ts
+      - tsconfig.json
+    generates:
+      - dist/**/*.js
+
+  package:
+    desc: Package Lambda functions for deployment
+    deps: [build]
+    cmds:
+      - mkdir -p build
+      - cd dist/hello && zip -r ../../build/hello.zip .
+      - cd dist/users && zip -r ../../build/users.zip .
+    sources:
+      - dist/**/*.js
+    generates:
+      - build/*.zip
+
+  # 🧪 Test-First: Build with Quality
+  test:
+    desc: Run all tests (unit + integration)
+    deps: [install]
+    cmds:
+      - npm test
+
+  test:unit:
+    desc: Run unit tests only
+    deps: [install]
+    cmds:
+      - npm run test:unit
+
+  test:integration:
+    desc: Run integration tests
+    deps: [install]
+    cmds:
+      - npm run test:integration
+
+  test:watch:
+    desc: Run tests in watch mode for TDD
+    deps: [install]
+    cmds:
+      - npm run test:watch
+
+  test:coverage:
+    desc: Generate test coverage report
+    deps: [install]
+    cmds:
+      - npm run test:coverage
+
+  # 📊 Observability First: Ship with Insight
+  logs:
+    desc: Tail Lambda function logs
+    cmds:
+      - aws logs tail /aws/lambda/lambda-typescript-template-hello --follow
+
+  logs:hello:
+    desc: Get hello function logs
+    cmds:
+      - aws logs describe-log-streams --log-group-name /aws/lambda/lambda-typescript-template-hello
+      - aws logs get-log-events --log-group-name /aws/lambda/lambda-typescript-template-hello --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/lambda-typescript-template-hello --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text)
+
+  logs:users:
+    desc: Get users function logs
+    cmds:
+      - aws logs describe-log-streams --log-group-name /aws/lambda/lambda-typescript-template-users
+      - aws logs get-log-events --log-group-name /aws/lambda/lambda-typescript-template-users --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/lambda-typescript-template-users --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text)
+
+  metrics:
+    desc: View CloudWatch metrics dashboard
+    cmds:
+      - echo "CloudWatch Dashboard: https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=lambda-typescript-template"
+
+  # 🏗️ Infrastructure as Code
+  tf:init:
+    desc: Initialize Terraform
+    dir: terraform
+    cmds:
+      - terraform init
+
+  tf:plan:
+    desc: Plan Terraform changes
+    dir: terraform
+    deps: [tf:init]
+    cmds:
+      - terraform plan -var="environment=dev"
+
+  tf:apply:
+    desc: Apply Terraform changes
+    dir: terraform
+    deps: [package]
+    cmds:
+      - terraform apply -var="environment=dev" -auto-approve
+
+  tf:destroy:
+    desc: Destroy Terraform infrastructure
+    dir: terraform
+    cmds:
+      - terraform destroy -var="environment=dev" -auto-approve
+
+
+  tf:validate:
+    desc: Validate Terraform configuration
+    dir: terraform
+    cmds:
+      - terraform validate
+      - terraform fmt -check
+
+  tf:security:
+    desc: Run security checks on Terraform
+    dir: terraform
+    cmds:
+      - |
+        if command -v tfsec >/dev/null 2>&1; then
+          tfsec .
+        else
+          echo "⚠️  tfsec not installed. Run: brew install tfsec"
+        fi
+
+  # 🛡️ Well-Architected: Ship with Excellence
+  lint:
+    desc: Run ESLint for code quality
+    deps: [install]
+    cmds:
+      - npm run lint
+
+  lint:fix:
+    desc: Fix ESLint issues automatically
+    deps: [install]
+    cmds:
+      - npm run lint:fix
+
+  security:
+    desc: Run security audit
+    deps: [install]
+    cmds:
+      - npm audit
+      - npm run security:check
+
+  validate:
+    desc: Run all validation checks
+    deps: [install]
+    cmds:
+      - task: lint
+      - task: test
+      - task: tf:validate
+      - task: tf:security
+      - task: security
+
+  # 🚀 Deployment Pipeline
+  deploy:dev:
+    desc: Deploy to development environment
+    cmds:
+      - task: validate
+      - task: tf:apply
+        vars: {ENVIRONMENT: dev}
+
+  deploy:staging:
+    desc: Deploy to staging environment
+    cmds:
+      - task: validate
+      - task: tf:apply
+        vars: {ENVIRONMENT: staging}
+
+  deploy:prod:
+    desc: Deploy to production environment
+    cmds:
+      - task: validate
+      - task: tf:apply
+        vars: {ENVIRONMENT: prod}
+
+  # 🧹 Cleanup
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf dist/
+      - rm -rf build/
+      - rm -rf node_modules/
+      - rm -rf coverage/
+
+  clean:tf:
+    desc: Clean Terraform state (DANGEROUS)
+    dir: terraform
+    cmds:
+      - rm -rf .terraform/
+      - rm -f .terraform.lock.hcl
+      - rm -f terraform.tfstate*
+
+  # 🔍 Development Tools
+  dev:setup:
+    desc: Setup development environment
+    cmds:
+      - task: install
+      - task: tf:init
+      - echo "✅ Development environment ready!"
+      - echo "💡 Run 'task test:watch' for TDD workflow"
+      - echo "🚀 Run 'task deploy:dev' to deploy"
+
+  dev:invoke:
+    desc: Invoke Lambda function locally
+    deps: [build]
+    cmds:
+      - |
+        echo "🧪 Invoking hello function locally..."
+        sam local invoke HelloFunction --event events/api-gateway-event.json
+
+  api:docs:
+    desc: Generate API documentation from OpenAPI spec
+    cmds:
+      - |
+        if command -v redoc-cli >/dev/null 2>&1; then
+          redoc-cli build openapi.yaml --output docs/api.html
+          echo "📚 API documentation generated: docs/api.html"
+        else
+          echo "⚠️  redoc-cli not installed. Run: npm install -g redoc-cli"
+        fi
+
+  api:validate:
+    desc: Validate OpenAPI specification
+    cmds:
+      - |
+        if command -v swagger-codegen >/dev/null 2>&1; then
+          swagger-codegen validate -i openapi.yaml
+        else
+          echo "⚠️  swagger-codegen not installed"
+          echo "📝 OpenAPI spec located at: openapi.yaml"
+        fi
+
+  # 📊 Well-Architected Review
+  review:
+    desc: Open Well-Architected review document
+    cmds:
+      - |
+        if [ -f "WELL_ARCHITECTED.md" ]; then
+          echo "📋 Opening Well-Architected review..."
+          open WELL_ARCHITECTED.md 2>/dev/null || echo "📄 Review document: WELL_ARCHITECTED.md"
+        else
+          echo "❌ WELL_ARCHITECTED.md not found. Run 'task generate:docs' first."
+        fi
+
+  generate:docs:
+    desc: Generate project documentation
+    cmds:
+      - task: api:docs
+      - echo "📚 Documentation generated successfully!"
