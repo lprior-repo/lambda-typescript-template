@@ -1,7 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { Logger } from '@aws-lambda-powertools/logger';
 import { Tracer } from '@aws-lambda-powertools/tracer';
-import { Metrics, MetricUnit } from '@aws-lambda-powertools/metrics';
+import { Metrics, MetricUnits } from '@aws-lambda-powertools/metrics';
 
 // Initialize AWS Powertools
 const logger = new Logger({
@@ -39,16 +39,17 @@ interface UsersResponse {
 
 // Add custom business metrics
 const addCustomMetrics = (userCount: number, success: boolean): void => {
-    metrics.addMetric('RequestCount', MetricUnit.Count, 1);
-    metrics.addMetric('UserCount', MetricUnit.Count, userCount);
+    metrics.addMetric('RequestCount', MetricUnits.Count, 1);
+    metrics.addMetric('UserCount', MetricUnits.Count, userCount);
 
     if (success) {
-        metrics.addMetric('SuccessCount', MetricUnit.Count, 1);
+        metrics.addMetric('SuccessCount', MetricUnits.Count, 1);
     } else {
-        metrics.addMetric('ErrorCount', MetricUnit.Count, 1);
+        metrics.addMetric('ErrorCount', MetricUnits.Count, 1);
     }
 };
 
+@tracer.captureMethod()
 const getUsersFromDatabase = async (): Promise<User[]> => {
     // Mock users data - in real implementation, you'd fetch from DynamoDB
     const users: User[] = [
@@ -76,15 +77,16 @@ const getUsersFromDatabase = async (): Promise<User[]> => {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     logger.info('Users retrieved from database', { userCount: users.length });
-    tracer.putAnnotation('userCount', users.length);
+    tracer.addAnnotation('userCount', users.length);
 
     return users;
 };
 
+@tracer.captureMethod()
 const processUsersRequest = async (event: APIGatewayProxyEvent): Promise<UsersResponse> => {
     // Add trace metadata
-    tracer.putAnnotation('path', event.path || '/users');
-    tracer.putMetadata('event', event);
+    tracer.addAnnotation('path', event.path || '/users');
+    tracer.addMetadata('event', event);
 
     logger.info('Processing users request', {
         path: event.path,
@@ -114,7 +116,7 @@ export const handler = async (
     context: Context
 ): Promise<APIGatewayProxyResult> => {
     // Set correlation ID for tracing
-    tracer.putAnnotation('correlationId', context.awsRequestId);
+    tracer.addAnnotation('correlationId', context.awsRequestId);
 
     logger.addContext(context);
 

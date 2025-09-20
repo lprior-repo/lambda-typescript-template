@@ -1,0 +1,112 @@
+name: Build Node.js Lambda Functions
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: "18"
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      functions: ${{ steps.changes.outputs.functions }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed functions
+        id: changes
+        run: |
+          # Get list of all function directories
+          FUNCTIONS=$(find src -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | jq -R -s -c 'split("\n")[:-1]')
+          echo "functions=$FUNCTIONS" >> $GITHUB_OUTPUT
+          echo "Detected functions: $FUNCTIONS"
+
+  build:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        function: ${{ fromJson(needs.detect-changes.outputs.functions) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install function dependencies
+        run: |
+          cd src/${{ matrix.function }}
+          npm ci --production
+
+      - name: Run tests
+        run: |
+          if [ -f "src/${{ matrix.function }}/package.json" ] && grep -q '"test"' "src/${{ matrix.function }}/package.json"; then
+            cd src/${{ matrix.function }}
+            npm test
+          else
+            echo "No tests found for ${{ matrix.function }}, skipping"
+          fi
+
+      - name: Create deployment package
+        run: |
+          mkdir -p build
+          cd src/${{ matrix.function }}
+          zip -r ../../build/${{ matrix.function }}.zip . -x "*.test.js" "test/*" "tests/*" "__tests__/*"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.function }}-lambda
+          path: build/${{ matrix.function }}.zip
+          retention-days: 7
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level=moderate
+
+      - name: Run dependency scan
+        uses: actions/dependency-review-action@v3
+        if: github.event_name == 'pull_request'
