@@ -30,9 +30,6 @@ jobs:
   build:
     needs: detect-changes
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        function: ${{ fromJson(needs.detect-changes.outputs.functions) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,34 +40,20 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Install root dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name: Install function dependencies
-        run: |
-          cd src/${{ matrix.function }}
-          npm ci --production
-
       - name: Run tests
-        run: |
-          if [ -f "src/${{ matrix.function }}/package.json" ] && grep -q '"test"' "src/${{ matrix.function }}/package.json"; then
-            cd src/${{ matrix.function }}
-            npm test
-          else
-            echo "No tests found for ${{ matrix.function }}, skipping"
-          fi
+        run: npm test
 
-      - name: Create deployment package
-        run: |
-          mkdir -p build
-          cd src/${{ matrix.function }}
-          zip -r ../../build/${{ matrix.function }}.zip . -x "*.test.js" "test/*" "tests/*" "__tests__/*"
+      - name: Build all functions
+        run: npm run build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.function }}-lambda
-          path: build/${{ matrix.function }}.zip
+          name: lambda-build-artifacts
+          path: build/
           retention-days: 7
 
   lint:
