@@ -36,7 +36,6 @@ jobs:
               - 'jest.config.js'
             terraform:
               - 'terraform/**'
-              - '.tflint.hcl'
 
   security:
     name: Security Scan
